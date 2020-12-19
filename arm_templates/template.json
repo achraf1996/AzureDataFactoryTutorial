@@ -1,0 +1,175 @@
+{
+    "$schema": "https://schema.management.azure.com/schemas/2015-01-01/deploymentTemplate.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+     
+        "servers_smarttooldbsrv_name": {
+            "defaultValue": "",
+            "type": "String"
+        },
+        "storageAccounts_smarttoolstorageacc_name": {
+            "defaultValue": "",
+            "type": "String"
+        },
+        "adfName": {
+            "defaultValue": "",
+            "type": "String"
+        },
+        "passwordsql": {
+            "defaultValue": "",
+            "type": "String"
+        },
+         "tenantId": {
+            "defaultValue": "",
+            "type": "String"
+        },
+         "sid": {
+            "defaultValue": "",
+            "type": "String"
+        },
+         "fullUsername": {
+            "defaultValue": "",
+            "type": "String"
+        }
+    },
+    "variables": {},
+    "resources": [
+        {
+            "type": "Microsoft.Sql/servers",
+            "apiVersion": "2019-06-01-preview",
+            "name": "[parameters('servers_smarttooldbsrv_name')]",
+            "location": "eastus",
+            "kind": "v12.0",
+            "properties": {
+                "administratorLogin": "admsmarttool",
+                "administratorLoginPassword": "[parameters('passwordsql')]",
+                "version": "12.0",
+                "publicNetworkAccess": "Enabled"
+            }
+        },
+        {
+            "type": "Microsoft.Storage/storageAccounts",
+            "apiVersion": "2020-08-01-preview",
+            "name": "[parameters('storageAccounts_smarttoolstorageacc_name')]",
+            "location": "eastus",
+            "sku": {
+                "name": "Standard_RAGRS",
+                "tier": "Standard"
+            },
+            "kind": "StorageV2",
+            "properties": {
+                "minimumTlsVersion": "TLS1_2",
+                "allowBlobPublicAccess": true,
+                "isHnsEnabled": true,
+                "networkAcls": {
+                    "bypass": "AzureServices",
+                    "virtualNetworkRules": [],
+                    "ipRules": [],
+                    "defaultAction": "Allow"
+                },
+                "supportsHttpsTrafficOnly": true,
+                "encryption": {
+                    "services": {
+                        "file": {
+                            "keyType": "Account",
+                            "enabled": true
+                        },
+                        "blob": {
+                            "keyType": "Account",
+                            "enabled": true
+                        }
+                    },
+                    "keySource": "Microsoft.Storage"
+                },
+                "accessTier": "Hot"
+            }
+        },
+        {
+            "type": "Microsoft.Sql/servers/administrators",
+            "apiVersion": "2019-06-01-preview",
+            "name": "[concat(parameters('servers_smarttooldbsrv_name'), '/ActiveDirectory')]",
+            "dependsOn": [
+                "[resourceId('Microsoft.Sql/servers', parameters('servers_smarttooldbsrv_name'))]"
+            ],
+            "properties": {
+                "administratorType": "ActiveDirectory",
+                "login": "[parameters('fullUsername')]",
+                "sid": "[parameters('sid')]",
+                "tenantId": "[parameters('tenantId')]"
+            }
+        },
+        {
+            "type": "Microsoft.Sql/servers/databases",
+            "apiVersion": "2020-08-01-preview",
+            "name": "[concat(parameters('servers_smarttooldbsrv_name'), '/SmartDB')]",
+            "location": "eastus",
+            "dependsOn": [
+                "[resourceId('Microsoft.Sql/servers', parameters('servers_smarttooldbsrv_name'))]"
+            ],
+            "sku": {
+                "name": "Basic",
+                "tier": "Basic",
+                "capacity": 5
+            },
+            "kind": "v12.0,user",
+            "properties": {
+                "collation": "SQL_Latin1_General_CP1_CI_AS",
+                "maxSizeBytes": 2147483648,
+                "catalogCollation": "SQL_Latin1_General_CP1_CI_AS",
+                "zoneRedundant": false,
+                "readScale": "Disabled",
+                "storageAccountType": "GRS"
+            }
+        },
+        {
+            "type": "Microsoft.Sql/servers/firewallRules",
+            "apiVersion": "2015-05-01-preview",
+            "name": "[concat(parameters('servers_smarttooldbsrv_name'), '/AllowAllWindowsAzureIps')]",
+            "dependsOn": [
+                "[resourceId('Microsoft.Sql/servers', parameters('servers_smarttooldbsrv_name'))]"
+            ],
+            "properties": {
+                "startIpAddress": "0.0.0.0",
+                "endIpAddress": "0.0.0.0"
+            }
+        },
+          {
+            "type": "Microsoft.DataFactory/factories",
+            "apiVersion": "2018-06-01",
+            "name": "[parameters('adfName')]",
+            "location": "eastus",
+            "resources": [
+                {
+                    "name": "[concat(parameters('adfName'), '/default')]",
+                    "type": "Microsoft.DataFactory/factories/managedVirtualNetworks",
+                    "apiVersion": "2018-06-01",
+                    "properties": {},
+                    "dependsOn": [
+                        "[concat('Microsoft.DataFactory/factories/', parameters('adfName'))]"
+                    ]
+                },
+                {
+                    "name": "[concat(parameters('adfName'), '/AutoResolveIntegrationRuntime')]",
+                    "type": "Microsoft.DataFactory/factories/integrationRuntimes",
+                    "apiVersion": "2018-06-01",
+                    "properties": {
+                        "type": "Managed",
+                        "managedVirtualNetwork": {
+                            "referenceName": "default",
+                            "type": "ManagedVirtualNetworkReference"
+                        },
+                        "typeProperties": {
+                            "computeProperties": {
+                                "location": "AutoResolve"
+                            }
+                        }
+                    },
+                    "dependsOn": [
+                        "[concat('Microsoft.DataFactory/factories/', parameters('adfName'))]",
+                        "[concat('Microsoft.DataFactory/factories/', parameters('adfName'), '/managedVirtualNetworks/default')]"
+                    ]
+                }
+            ]
+        }
+    ]
+}
